@@ -1,0 +1,539 @@
+# -*- encoding: utf-8 -*-
+"""
+API路由 - 整合所有接口
+"""
+
+import threading
+import uuid
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Depends
+from pydantic import BaseModel
+from sqlalchemy.orm import Session
+from loguru import logger
+
+from backend.config import settings, set_cookie, get_cookie
+from backend.db.database import get_db
+from backend.db import crud
+from backend.db.models import Author, Video, AuthorGroup
+from backend.lib.douyin.request import Request
+from backend.lib.douyin.client import DouyinClient
+from backend.lib.douyin.parser import DataParser
+from backend.lib.douyin.target import TargetHandler
+
+router = APIRouter()
+
+# 内存存储任务状态
+task_status = {}
+task_results = {}
+
+
+# ==================== 请求模型 ====================
+
+class AddAuthorRequest(BaseModel):
+    """添加UP主请求"""
+    url: str  # UP主主页链接
+
+
+class SetCookieRequest(BaseModel):
+    """设置Cookie请求"""
+    cookie: str
+
+
+class CreateGroupRequest(BaseModel):
+    """创建分组请求"""
+    name: str
+
+
+class UpdateGroupRequest(BaseModel):
+    """更新分组请求"""
+    name: str
+
+
+class MoveAuthorRequest(BaseModel):
+    """移动UP主到分组请求"""
+    group_id: Optional[int] = None  # None表示移动到未分组
+
+
+# ==================== 基础接口 ====================
+
+@router.get("")
+def api_info():
+    """API信息"""
+    return {"name": settings.app_name, "version": settings.app_version}
+
+
+@router.get("/health")
+def health_check():
+    """健康检查"""
+    return {"status": "ok"}
+
+
+@router.get("/settings")
+def get_settings_api():
+    """获取设置"""
+    return {
+        "cookie_configured": bool(settings.cookie),
+        "download_path": settings.download_path,
+    }
+
+
+@router.get("/settings/cookie/verify")
+def verify_cookie():
+    """验证Cookie是否有效"""
+    cookie = get_cookie()
+    if not cookie:
+        return {"valid": False, "message": "未配置Cookie"}
+
+    try:
+        req = Request(cookie=cookie)
+        client = DouyinClient(req)
+
+        # 尝试获取一个公开的用户视频列表来验证Cookie
+        # 使用一个已知的公开用户ID进行测试
+        test_user_id = "MS4wLjABAAAAiGywoJJrulAYh3vmkMdRbmdv_WRSjFms2t6Mwmf7iEzEp_iOyKZdqO9z2M3Bi68B"
+        items, _, _, _ = client.fetch_awemes_list("post", test_user_id, 0, "", {})
+
+        if items:
+            return {"valid": True, "message": "Cookie有效"}
+        else:
+            return {"valid": False, "message": "Cookie可能已过期，无法获取数据"}
+
+    except Exception as e:
+        logger.error(f"Cookie验证失败: {e}")
+        return {"valid": False, "message": f"Cookie无效或已过期: {str(e)[:50]}"}
+
+
+@router.post("/settings/cookie")
+def set_cookie_api(data: SetCookieRequest):
+    """设置Cookie"""
+    set_cookie(data.cookie)
+    return {"success": True, "message": "Cookie已保存"}
+
+
+# ==================== 分组管理 ====================
+
+@router.get("/groups")
+def get_groups(db: Session = Depends(get_db)):
+    """获取所有分组"""
+    groups = crud.get_all_groups(db)
+    return [g.to_dict() for g in groups]
+
+
+@router.post("/groups")
+def create_group(data: CreateGroupRequest, db: Session = Depends(get_db)):
+    """创建分组"""
+    group = crud.create_group(db, data.name)
+    return {"success": True, "group": group.to_dict()}
+
+
+@router.put("/groups/{group_id}")
+def update_group(group_id: int, data: UpdateGroupRequest, db: Session = Depends(get_db)):
+    """更新分组名称"""
+    group = crud.get_group_by_id(db, group_id)
+    if not group:
+        raise HTTPException(status_code=404, detail="分组不存在")
+    group = crud.update_group(db, group, name=data.name)
+    return {"success": True, "group": group.to_dict()}
+
+
+@router.delete("/groups/{group_id}")
+def delete_group(group_id: int, db: Session = Depends(get_db)):
+    """删除分组"""
+    success = crud.delete_group(db, group_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="分组不存在")
+    return {"success": True, "message": "删除成功"}
+
+
+@router.put("/authors/{author_id}/group")
+def move_author_to_group(author_id: int, data: MoveAuthorRequest, db: Session = Depends(get_db)):
+    """移动UP主到分组"""
+    success = crud.move_author_to_group(db, author_id, data.group_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="UP主不存在")
+    return {"success": True, "message": "移动成功"}
+
+
+# ==================== UP主管理 ====================
+
+@router.get("/authors")
+def get_authors(db: Session = Depends(get_db)):
+    """获取所有UP主列表"""
+    authors = crud.get_all_authors(db)
+    return [a.to_dict() for a in authors]
+
+
+@router.post("/authors")
+def add_author(data: AddAuthorRequest, db: Session = Depends(get_db)):
+    """添加UP主"""
+    cookie = get_cookie()
+    if not cookie:
+        raise HTTPException(status_code=400, detail="请先配置Cookie")
+
+    try:
+        # 解析URL获取sec_user_id
+        req = Request(cookie=cookie)
+        handler = TargetHandler(req, data.url, "post", settings.download_path)
+        handler.parse_target_id()
+
+        sec_user_id = handler.id
+        if not sec_user_id:
+            raise HTTPException(status_code=400, detail="无法解析UP主ID")
+
+        # 检查是否已存在
+        existing = crud.get_author_by_sec_id(db, sec_user_id)
+        if existing:
+            return {"success": True, "author": existing.to_dict(), "message": "UP主已存在"}
+
+        # 通过API获取UP主信息（从第一个视频获取）
+        client = DouyinClient(req)
+        items, _, _, _ = client.fetch_awemes_list("post", sec_user_id, 0, "", {})
+
+        nickname = "未知用户"
+        avatar = ""
+        signature = ""
+
+        if items:
+            # 从第一个视频中提取作者信息
+            first_item = items[0]
+            if first_item.get("aweme_info"):
+                first_item = first_item["aweme_info"]
+
+            author_info = first_item.get("author", {})
+            nickname = author_info.get("nickname", "未知用户")
+            signature = author_info.get("signature", "")
+
+            avatar_thumb = author_info.get("avatar_thumb", {})
+            avatar_list = avatar_thumb.get("url_list", []) if avatar_thumb else []
+            avatar = avatar_list[0] if avatar_list else ""
+
+            logger.info(f"获取UP主信息: {nickname}")
+
+        # 创建UP主
+        author = crud.create_author(
+            db,
+            sec_user_id=sec_user_id,
+            nickname=nickname,
+            avatar=avatar,
+            signature=signature,
+        )
+
+        # 后台爬取视频（首次添加，不标记为新视频）
+        thread = threading.Thread(
+            target=_crawl_author_videos,
+            args=(sec_user_id, author.id, cookie, db),
+            kwargs={"mark_as_new": False},
+            daemon=True
+        )
+        thread.start()
+
+        return {"success": True, "author": author.to_dict(), "message": "UP主添加成功，正在获取视频..."}
+
+    except Exception as e:
+        logger.error(f"添加UP主失败: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.delete("/authors/{author_id}")
+def delete_author(author_id: int, db: Session = Depends(get_db)):
+    """删除UP主"""
+    success = crud.delete_author(db, author_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="UP主不存在")
+    return {"success": True, "message": "删除成功"}
+
+
+@router.post("/authors/{author_id}/refresh")
+def refresh_author(author_id: int, db: Session = Depends(get_db)):
+    """刷新UP主视频"""
+    author = crud.get_author_by_id(db, author_id)
+    if not author:
+        raise HTTPException(status_code=404, detail="UP主不存在")
+
+    cookie = get_cookie()
+    if not cookie:
+        raise HTTPException(status_code=400, detail="请先配置Cookie")
+
+    # 后台爬取
+    thread = threading.Thread(
+        target=_crawl_author_videos,
+        args=(author.sec_user_id, author.id, cookie, db),
+        daemon=True
+    )
+    thread.start()
+
+    return {"success": True, "message": "正在刷新视频..."}
+
+
+# ==================== 视频检查 ====================
+
+@router.post("/videos/check")
+def check_new_videos():
+    """手动触发检查所有UP主的新视频"""
+    from backend.services.scheduler import check_new_videos
+
+    cookie = get_cookie()
+    if not cookie:
+        raise HTTPException(status_code=400, detail="请先配置Cookie")
+
+    # 后台执行检查
+    thread = threading.Thread(target=check_new_videos, daemon=True)
+    thread.start()
+
+    return {"success": True, "message": "正在检查新视频..."}
+
+
+# ==================== 视频管理 ====================
+
+@router.get("/videos")
+def get_videos(
+    author_id: Optional[int] = None,
+    group_id: Optional[int] = None,
+    limit: int = 100,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """获取视频列表"""
+    if author_id:
+        videos = crud.get_videos_by_author(db, author_id)
+        total = len(videos)
+    elif group_id is not None:
+        videos = crud.get_videos_by_group(db, group_id, limit, offset)
+        total = crud.count_videos_by_group(db, group_id)
+    else:
+        videos = crud.get_all_videos(db, limit, offset)
+        total = crud.count_videos(db)
+
+    new_count = crud.count_new_videos(db)
+
+    return {
+        "total": total,
+        "new_count": new_count,
+        "videos": [v.to_dict() for v in videos],
+    }
+
+
+@router.get("/videos/new")
+def get_new_videos(db: Session = Depends(get_db)):
+    """获取新视频（用于提醒）"""
+    videos = crud.get_new_videos(db)
+    return {"count": len(videos), "videos": [v.to_dict() for v in videos]}
+
+
+@router.post("/videos/{video_id}/read")
+def mark_video_read(video_id: int, db: Session = Depends(get_db)):
+    """标记视频为已读"""
+    success = crud.mark_video_as_read(db, video_id)
+    if not success:
+        raise HTTPException(status_code=404, detail="视频不存在")
+    return {"success": True}
+
+
+@router.post("/videos/read-all")
+def mark_all_read(db: Session = Depends(get_db)):
+    """标记所有视频为已读"""
+    count = crud.mark_all_videos_as_read(db)
+    return {"success": True, "count": count}
+
+
+# ==================== 数据看板 ====================
+
+@router.get("/dashboard")
+def get_dashboard(db: Session = Depends(get_db)):
+    """获取数据看板"""
+    authors = crud.get_all_authors(db)
+    new_videos = crud.get_new_videos(db)
+    total_videos = crud.count_videos(db)
+
+    return {
+        "author_count": len(authors),
+        "video_count": total_videos,
+        "new_video_count": len(new_videos),
+        "new_videos": [v.to_dict() for v in new_videos[:10]],  # 最近10个新视频
+    }
+
+
+# ==================== 后台爬取任务 ====================
+
+def _crawl_author_videos(sec_user_id: str, author_id: int, cookie: str, db: Session, mark_as_new: bool = True):
+    """
+    后台爬取UP主视频
+
+    Args:
+        sec_user_id: UP主的sec_user_id
+        author_id: 数据库中的UP主ID
+        cookie: Cookie字符串
+        db: 数据库会话
+        mark_as_new: 是否将新视频标记为"新视频"（首次添加UP主时应为False）
+    """
+    try:
+        req = Request(cookie=cookie)
+        client = DouyinClient(req)
+
+        max_cursor = 0
+        has_more = True
+        latest_time = 0
+        new_count = 0
+
+        while has_more:
+            items, max_cursor, _, has_more = client.fetch_awemes_list(
+                "post", sec_user_id, max_cursor, "", {}
+            )
+
+            for item in items:
+                if item.get("aweme_info"):
+                    item = item["aweme_info"]
+
+                aweme_id = item.get("aweme_id", item.get("awemeId"))
+                if not aweme_id:
+                    continue
+
+                # 检查是否已存在
+                existing = crud.get_video_by_aweme_id(db, aweme_id)
+                if existing:
+                    # 如果是增量更新（mark_as_new=True），遇到已存在视频则提前退出
+                    # 因为视频列表是按时间倒序排列的，后面的肯定都存在
+                    if mark_as_new:
+                        logger.info(f"遇到已存在视频 {aweme_id}，提前结束检查")
+                        has_more = False
+                        break
+                    continue
+
+                # 解析视频数据
+                create_time = item.get("create_time", item.get("createTime", 0))
+                if create_time > latest_time:
+                    latest_time = create_time
+
+                # 获取下载链接
+                video = item.get("video", {})
+                play_addr = video.get("play_addr")
+                if play_addr:
+                    download_url = play_addr.get("url_list", [""])[-1]
+                else:
+                    download_url = ""
+
+                # 获取封面
+                cover = video.get("cover", {})
+                cover_url = cover.get("url_list", [""])[-1] if cover else ""
+
+                # 保存到数据库
+                crud.create_video(
+                    db,
+                    author_id=author_id,
+                    aweme_id=aweme_id,
+                    desc=item.get("desc", "")[:500],
+                    cover=cover_url,
+                    video_url=f"https://www.douyin.com/video/{aweme_id}",
+                    download_url=download_url,
+                    create_time=create_time,
+                    duration=video.get("duration", 0),
+                    digg_count=item.get("statistics", {}).get("digg_count", 0),
+                    comment_count=item.get("statistics", {}).get("comment_count", 0),
+                    share_count=item.get("statistics", {}).get("share_count", 0),
+                    collect_count=item.get("statistics", {}).get("collect_count", 0),
+                    is_new=mark_as_new,  # 根据参数决定是否标记为新视频
+                )
+                new_count += 1
+                logger.info(f"新视频: {aweme_id} - {item.get('desc', '')[:30]}")
+
+            logger.info(f"已爬取 {new_count} 个新视频")
+
+        # 更新UP主信息
+        author = crud.get_author_by_id(db, author_id)
+        if author:
+            crud.update_author(
+                db, author,
+                latest_video_time=latest_time,
+                video_count=author.video_count + new_count
+            )
+
+        logger.success(f"UP主 {sec_user_id} 爬取完成，新增 {new_count} 个视频")
+
+    except Exception as e:
+        logger.error(f"爬取失败: {e}")
+
+
+# ==================== 兼容旧接口 ====================
+
+@router.post("/task/start")
+def start_task(data: AddAuthorRequest):
+    """兼容旧接口：启动任务爬取"""
+    cookie = get_cookie()
+    if not cookie:
+        raise HTTPException(status_code=400, detail="请先配置Cookie")
+
+    task_id = f"task_{uuid.uuid4().hex[:8]}"
+    task_status[task_id] = {
+        "id": task_id,
+        "status": "running",
+        "progress": 0,
+        "total": 0,
+        "message": "正在获取视频列表...",
+    }
+    task_results[task_id] = []
+
+    def _run():
+        try:
+            req = Request(cookie=cookie)
+            handler = TargetHandler(req, data.url, "post", settings.download_path)
+            handler.parse_target_id()
+
+            client = DouyinClient(req)
+            max_cursor = 0
+            has_more = True
+            results = []
+
+            while has_more:
+                items, max_cursor, _, has_more = client.fetch_awemes_list(
+                    "post", handler.id, max_cursor, "", {}
+                )
+                DataParser.parse_awemes(items, results, [], 0, has_more, "post", "")
+
+                task_status[task_id]["total"] = len(results)
+                task_status[task_id]["progress"] = len(results)
+
+            # 转换结果
+            videos = []
+            for item in results:
+                videos.append({
+                    "id": item.get("id", ""),
+                    "desc": item.get("desc", ""),
+                    "author_nickname": item.get("author_nickname", ""),
+                    "cover": item.get("cover", ""),
+                    "video_url": f"https://www.douyin.com/video/{item.get('id', '')}",
+                    "download_url": item.get("download_addr", ""),
+                    "create_time": item.get("time", 0),
+                    "digg_count": item.get("digg_count", 0),
+                    "comment_count": item.get("comment_count", 0),
+                })
+
+            task_results[task_id] = videos
+            task_status[task_id]["status"] = "completed"
+            task_status[task_id]["total"] = len(videos)
+
+        except Exception as e:
+            task_status[task_id]["status"] = "error"
+            task_status[task_id]["message"] = str(e)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+
+    return {"task_id": task_id, "status": "running"}
+
+
+@router.get("/task/status")
+def get_task_status(task_id: Optional[str] = None):
+    """获取任务状态"""
+    if task_id:
+        return task_status.get(task_id, {})
+    return list(task_status.values())
+
+
+@router.get("/task/results/{task_id}")
+def get_task_results(task_id: str):
+    """获取任务结果"""
+    if task_id not in task_results:
+        raise HTTPException(status_code=404, detail="任务不存在")
+    return task_results[task_id]
