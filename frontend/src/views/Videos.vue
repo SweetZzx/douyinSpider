@@ -138,13 +138,14 @@ onMounted(loadVideos)
 
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-      <h2 style="margin: 0;">视频列表</h2>
-      <div style="display: flex; gap: 12px; align-items: center;">
+    <!-- 页面头部 -->
+    <div class="page-header">
+      <h2 class="page-title">视频列表</h2>
+      <div class="page-actions">
         <el-select
           v-model="selectedFilter"
-          placeholder="筛选视频"
-          style="width: 200px;"
+          placeholder="筛选"
+          class="filter-select"
           @change="handleFilterChange"
           filterable
           clearable
@@ -157,17 +158,42 @@ onMounted(loadVideos)
           />
         </el-select>
         <el-button @click="loadVideos" :loading="loading">
-          <el-icon><Refresh /></el-icon> 刷新
+          <el-icon><Refresh /></el-icon>
+          <span class="btn-text">刷新</span>
         </el-button>
       </div>
     </div>
 
-    <el-card shadow="never">
+    <el-card shadow="never" class="video-card">
       <template #header>
         <span>共 <b>{{ total }}</b> 个视频</span>
       </template>
 
-      <el-table :data="videos" stripe v-loading="loading" style="width: 100%">
+      <!-- 移动端卡片列表 -->
+      <div v-loading="loading" class="video-list-mobile">
+        <a
+          v-for="video in videos"
+          :key="video.id"
+          :href="video.video_url"
+          target="_blank"
+          class="video-item"
+        >
+          <img :src="video.cover" class="video-cover" alt="" />
+          <div class="video-info">
+            <div class="video-author">{{ video.author_nickname || '--' }}</div>
+            <div class="video-desc">{{ video.desc || '无标题' }}</div>
+            <div class="video-meta">
+              <span>👍 {{ formatNum(video.digg_count) }}</span>
+              <span>💬 {{ formatNum(video.comment_count) }}</span>
+              <span>{{ formatDate(video.create_time) }}</span>
+            </div>
+          </div>
+        </a>
+        <el-empty v-if="!loading && videos.length === 0" description="暂无视频" />
+      </div>
+
+      <!-- PC端表格 -->
+      <el-table :data="videos" stripe v-loading="loading" class="video-table-pc">
         <el-table-column type="index" label="#" width="50" />
 
         <el-table-column label="封面" width="80">
@@ -216,17 +242,170 @@ onMounted(loadVideos)
         </el-table-column>
       </el-table>
 
-      <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+      <el-empty v-if="!loading && videos.length === 0" class="empty-pc" description="暂无视频，请先添加UP主" />
+
+      <!-- 分页 -->
+      <div class="pagination-wrapper">
         <el-pagination
           v-model:current-page="page"
           v-model:page-size="pageSize"
           :total="total"
-          :page-sizes="[20, 50, 100, 200]"
-          layout="total, sizes, prev, pager, next"
+          :page-sizes="[20, 50, 100]"
+          :pager-count="5"
+          layout="total, prev, pager, next"
+          small
         />
       </div>
-
-      <el-empty v-if="!loading && videos.length === 0" description="暂无视频，请先添加UP主" />
     </el-card>
   </div>
 </template>
+
+<style scoped>
+/* 页面头部 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.page-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.filter-select {
+  width: 160px;
+}
+
+/* 视频卡片 */
+.video-card {
+  overflow: hidden;
+}
+
+/* 移动端视频列表 */
+.video-list-mobile {
+  display: none;
+}
+
+.video-item {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+  text-decoration: none;
+  color: inherit;
+}
+
+.video-item:last-child {
+  border-bottom: none;
+}
+
+.video-cover {
+  width: 80px;
+  height: 106px;
+  object-fit: cover;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.video-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.video-author {
+  font-size: 12px;
+  color: #909399;
+}
+
+.video-desc {
+  font-size: 14px;
+  color: #303133;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.video-meta {
+  font-size: 12px;
+  color: #c0c4cc;
+  display: flex;
+  gap: 12px;
+}
+
+/* PC端表格 */
+.video-table-pc {
+  display: table;
+}
+
+.empty-pc {
+  display: flex;
+}
+
+/* 分页 */
+.pagination-wrapper {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .page-actions {
+    justify-content: space-between;
+  }
+
+  .filter-select {
+    flex: 1;
+    max-width: 200px;
+  }
+
+  .btn-text {
+    display: none;
+  }
+
+  .video-list-mobile {
+    display: block;
+  }
+
+  .video-table-pc {
+    display: none;
+  }
+
+  .empty-pc {
+    display: none;
+  }
+
+  .pagination-wrapper {
+    justify-content: center;
+  }
+
+  :deep(.el-pagination) {
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+</style>

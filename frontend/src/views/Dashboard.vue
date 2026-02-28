@@ -98,11 +98,11 @@ onMounted(() => {
     <h2 style="margin-bottom: 20px;">数据看板</h2>
 
     <!-- 统计卡片 -->
-    <el-row :gutter="20" style="margin-bottom: 20px;">
-      <el-col :span="8">
+    <el-row :gutter="12" class="stat-row">
+      <el-col :xs="12" :sm="8">
         <el-card shadow="hover" class="stat-card" @click="goToAuthors">
           <div class="stat-content">
-            <el-icon :size="40" color="#409EFF"><User /></el-icon>
+            <el-icon :size="32" color="#409EFF"><User /></el-icon>
             <div class="stat-info">
               <div class="stat-num">{{ dashboard.author_count }}</div>
               <div class="stat-label">关注UP主</div>
@@ -110,10 +110,10 @@ onMounted(() => {
           </div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="12" :sm="8">
         <el-card shadow="hover" class="stat-card" @click="goToVideos">
           <div class="stat-content">
-            <el-icon :size="40" color="#67C23A"><VideoPlay /></el-icon>
+            <el-icon :size="32" color="#67C23A"><VideoPlay /></el-icon>
             <div class="stat-info">
               <div class="stat-num">{{ dashboard.video_count }}</div>
               <div class="stat-label">视频总数</div>
@@ -121,10 +121,10 @@ onMounted(() => {
           </div>
         </el-card>
       </el-col>
-      <el-col :span="8">
+      <el-col :xs="24" :sm="8">
         <el-card shadow="hover" class="stat-card">
           <div class="stat-content">
-            <el-icon :size="40" color="#E6A23C"><Bell /></el-icon>
+            <el-icon :size="32" color="#E6A23C"><Bell /></el-icon>
             <div class="stat-info">
               <div class="stat-num" :class="{ 'has-new': dashboard.new_video_count > 0 }">
                 {{ dashboard.new_video_count }}
@@ -137,20 +137,21 @@ onMounted(() => {
     </el-row>
 
     <!-- 新视频提醒 -->
-    <el-card shadow="never">
+    <el-card shadow="never" class="video-card">
       <template #header>
-        <div style="display: flex; justify-content: space-between; align-items: center;">
-          <span>
+        <div class="card-header">
+          <span class="card-title">
             <el-icon><Bell /></el-icon>
             新视频提醒
-            <el-badge v-if="dashboard.new_video_count > 0" :value="dashboard.new_video_count" style="margin-left: 8px;" />
+            <el-badge v-if="dashboard.new_video_count > 0" :value="dashboard.new_video_count" class="new-badge" />
           </span>
-          <div>
+          <div class="card-actions">
             <el-button size="small" @click="handleCheckNewVideos" :loading="checking">
-              <el-icon><Refresh /></el-icon> 检查新视频
+              <el-icon class="btn-icon"><Refresh /></el-icon>
+              <span class="btn-text">检查新视频</span>
             </el-button>
             <el-button size="small" @click="loadDashboard" :loading="loading">
-              刷新列表
+              <el-icon><Refresh /></el-icon>
             </el-button>
             <el-button
               v-if="dashboard.new_video_count > 0"
@@ -164,7 +165,24 @@ onMounted(() => {
         </div>
       </template>
 
-      <el-table v-if="dashboard.new_videos.length > 0" :data="dashboard.new_videos" stripe>
+      <!-- 移动端卡片列表 -->
+      <div v-if="dashboard.new_videos.length > 0" class="video-list-mobile">
+        <div v-for="video in dashboard.new_videos" :key="video.id" class="video-item">
+          <a :href="video.video_url" target="_blank" class="video-link">
+            <div class="video-author">{{ video.author_nickname || '--' }}</div>
+            <div class="video-desc">{{ video.desc || '无标题' }}</div>
+            <div class="video-meta">{{ formatDate(video.create_time) }}</div>
+          </a>
+        </div>
+      </div>
+
+      <!-- PC端表格 -->
+      <el-table
+        v-if="dashboard.new_videos.length > 0"
+        :data="dashboard.new_videos"
+        stripe
+        class="video-table-pc"
+      >
         <el-table-column label="UP主" width="120">
           <template #default="{ row }">
             {{ row.author_nickname || '--' }}
@@ -196,31 +214,153 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* 统计卡片 */
+.stat-row {
+  margin-bottom: 12px;
+}
+
 .stat-card {
   cursor: pointer;
   transition: transform 0.2s;
+  margin-bottom: 8px;
 }
+
 .stat-card:hover {
-  transform: translateY(-4px);
+  transform: translateY(-2px);
 }
+
 .stat-content {
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 12px;
 }
+
 .stat-info {
   text-align: left;
 }
+
 .stat-num {
-  font-size: 28px;
+  font-size: 24px;
   font-weight: bold;
   color: #303133;
 }
+
 .stat-num.has-new {
   color: #E6A23C;
 }
+
 .stat-label {
   color: #909399;
+  font-size: 13px;
+}
+
+/* 卡片头部 */
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.card-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.new-badge {
+  margin-left: 4px;
+}
+
+.card-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 移动端视频列表 */
+.video-list-mobile {
+  display: none;
+}
+
+.video-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #eee;
+}
+
+.video-item:last-child {
+  border-bottom: none;
+}
+
+.video-link {
+  text-decoration: none;
+  color: inherit;
+}
+
+.video-author {
+  font-size: 12px;
+  color: #909399;
+  margin-bottom: 4px;
+}
+
+.video-desc {
+  color: #303133;
   font-size: 14px;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.video-meta {
+  font-size: 12px;
+  color: #c0c4cc;
+  margin-top: 4px;
+}
+
+/* PC端表格 */
+.video-table-pc {
+  display: table;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .stat-card:hover {
+    transform: none;
+  }
+
+  .stat-num {
+    font-size: 20px;
+  }
+
+  .stat-content {
+    gap: 8px;
+  }
+
+  .card-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .card-actions {
+    width: 100%;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  /* 移动端：检查按钮只显示文字，刷新按钮只显示图标 */
+  .btn-icon {
+    display: none;
+  }
+
+  .video-list-mobile {
+    display: block;
+  }
+
+  .video-table-pc {
+    display: none;
+  }
 }
 </style>

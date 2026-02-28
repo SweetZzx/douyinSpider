@@ -55,11 +55,6 @@ const groupedAuthors = computed(() => {
   return result
 })
 
-const formatDate = (dateStr: string) => {
-  if (!dateStr) return '--'
-  return new Date(dateStr).toLocaleDateString('zh-CN')
-}
-
 const loadData = async () => {
   loading.value = true
   try {
@@ -227,14 +222,16 @@ onMounted(loadData)
 
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
-      <h2 style="margin: 0;">UP主管理</h2>
-      <div style="display: flex; gap: 10px;">
-        <el-button @click="openCreateGroup">
-          <el-icon><FolderAdd /></el-icon> 新建分组
+    <div class="page-header">
+      <h2 class="page-title">UP主管理</h2>
+      <div class="page-actions">
+        <el-button @click="openCreateGroup" class="action-btn">
+          <el-icon><FolderAdd /></el-icon>
+          <span class="btn-text">新建分组</span>
         </el-button>
-        <el-button type="primary" @click="showAddDialog = true">
-          <el-icon><Plus /></el-icon> 添加UP主
+        <el-button type="primary" @click="showAddDialog = true" class="action-btn">
+          <el-icon><Plus /></el-icon>
+          <span class="btn-text">添加UP主</span>
         </el-button>
       </div>
     </div>
@@ -348,7 +345,7 @@ onMounted(loadData)
     <el-empty v-if="!loading && authors.length === 0 && groups.length === 0" description="暂无UP主，点击上方按钮添加" />
 
     <!-- 添加UP主弹窗 -->
-    <el-dialog v-model="showAddDialog" title="添加UP主" width="500px">
+    <el-dialog v-model="showAddDialog" title="添加UP主" width="500px" class="responsive-dialog">
       <el-form @submit.prevent="handleAdd">
         <el-form-item label="UP主链接">
           <el-input
@@ -365,7 +362,7 @@ onMounted(loadData)
     </el-dialog>
 
     <!-- 创建/编辑分组弹窗 -->
-    <el-dialog v-model="showGroupDialog" :title="editingGroup ? '编辑分组' : '新建分组'" width="400px">
+    <el-dialog v-model="showGroupDialog" :title="editingGroup ? '编辑分组' : '新建分组'" width="400px" class="responsive-dialog">
       <el-form @submit.prevent="handleSaveGroup">
         <el-form-item label="分组名称">
           <el-input
@@ -386,10 +383,31 @@ onMounted(loadData)
 </template>
 
 <style scoped>
+/* 页面头部 */
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.page-title {
+  margin: 0;
+  font-size: 18px;
+}
+
+.page-actions {
+  display: flex;
+  gap: 10px;
+}
+
+/* 分组容器 */
 .groups-container {
   display: flex;
   flex-direction: column;
-  gap: 20px;
+  gap: 16px;
 }
 
 .group-section {
@@ -402,17 +420,12 @@ onMounted(loadData)
 .group-section.drag-over {
   border: 2px dashed #409eff !important;
   background: rgba(64, 158, 255, 0.2) !important;
-  box-shadow: 0 2px rgba(64, 158, 255, 0.2);
 }
 
 .group-section.ungrouped.drag-over {
   border-style: dashed;
   border-color: #67c23a;
   background: #f0f9eb;
-}
-
-.group-content.drag-active {
-  background: #d9ecf4;
 }
 
 .group-section.ungrouped {
@@ -423,7 +436,7 @@ onMounted(loadData)
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 16px;
+  padding: 10px 14px;
   border-bottom: 1px solid #e4e7ed;
   background: #fafafa;
   border-radius: 6px 6px 0 0;
@@ -454,21 +467,24 @@ onMounted(loadData)
 .group-content {
   display: flex;
   flex-wrap: wrap;
-  gap: 12px;
-  padding: 16px;
-  min-height: 80px;
+  gap: 10px;
+  padding: 12px;
+  min-height: 70px;
 }
 
 .author-card {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 12px;
+  padding: 8px 12px;
   background: #f5f7fa;
   border-radius: 8px;
   cursor: grab;
   transition: all 0.2s;
   border: 1px solid transparent;
+  flex: 1;
+  min-width: 200px;
+  max-width: 100%;
 }
 
 .author-card:hover {
@@ -482,13 +498,17 @@ onMounted(loadData)
 
 .author-info {
   flex: 1;
-  min-width: 100px;
+  min-width: 80px;
+  overflow: hidden;
 }
 
 .author-name {
   font-weight: 500;
   color: #303133;
   font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .author-meta {
@@ -513,6 +533,78 @@ onMounted(loadData)
   text-align: center;
   color: #c0c4cc;
   font-size: 13px;
-  padding: 20px 0;
+  padding: 16px 0;
+}
+
+/* 移动端适配 */
+@media (max-width: 768px) {
+  .page-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-title {
+    font-size: 16px;
+  }
+
+  .page-actions {
+    justify-content: flex-end;
+  }
+
+  .btn-text {
+    display: none;
+  }
+
+  .action-btn {
+    padding: 8px 12px;
+  }
+
+  .groups-container {
+    gap: 12px;
+  }
+
+  .group-header {
+    padding: 8px 12px;
+  }
+
+  .group-name {
+    font-size: 14px;
+  }
+
+  .group-content {
+    padding: 10px;
+    gap: 8px;
+  }
+
+  .author-card {
+    min-width: 0;
+    flex: 0 0 auto;
+    width: auto;
+    max-width: 100%;
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .author-name {
+    font-size: 13px;
+  }
+
+  .author-info {
+    min-width: 60px;
+  }
+
+  /* 移动端始终显示操作按钮 */
+  .author-actions {
+    opacity: 1;
+  }
+
+  .author-name {
+    font-size: 13px;
+  }
+}
+
+/* 弹窗适配 */
+:global(.responsive-dialog) {
+  max-width: 90vw !important;
 }
 </style>
