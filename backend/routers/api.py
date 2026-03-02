@@ -21,6 +21,7 @@ from backend.lib.douyin.request import Request
 from backend.lib.douyin.client import DouyinClient
 from backend.lib.douyin.parser import DataParser
 from backend.lib.douyin.target import TargetHandler
+from backend.utils.text import extract_valid_urls
 
 router = APIRouter()
 
@@ -173,43 +174,66 @@ def add_author(data: AddAuthorRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="请先配置Cookie")
 
     try:
-        # 解析URL获取sec_user_id
+        # 从输入中提取有效URL（处理手机分享的文本）
+        url = extract_valid_urls(data.url)
+        if not url:
+            raise HTTPException(status_code=400, detail="无法识别有效的链接")
+
+        # 解析URL获取目标信息
         req = Request(cookie=cookie)
-        handler = TargetHandler(req, data.url, "post", settings.download_path)
+        handler = TargetHandler(req, url, "post", settings.download_path)
         handler.parse_target_id()
 
-        sec_user_id = handler.id
+        client = DouyinClient(req)
+        sec_user_id = None
+
+        # 如果是单个视频链接，从视频中获取作者ID
+        if handler.type == "aweme":
+            logger.info(f"检测到视频链接，正在获取作者信息: {handler.id}")
+            aweme_detail = client.fetch_aweme_detail(handler.id)
+            author_info = aweme_detail.get("author", {})
+            sec_user_id = author_info.get("sec_uid", "")
+            nickname = author_info.get("nickname", "未知用户")
+            signature = author_info.get("signature", "")
+            avatar_thumb = author_info.get("avatar_thumb", {})
+            avatar_list = avatar_thumb.get("url_list", []) if avatar_thumb else []
+            avatar = avatar_list[0] if avatar_list else ""
+        else:
+            # 用户主页链接
+            sec_user_id = handler.id
+            if not sec_user_id:
+                raise HTTPException(status_code=400, detail="无法解析UP主ID")
+
+            # 通过API获取UP主信息（从第一个视频获取）
+            items, _, _, _ = client.fetch_awemes_list("post", sec_user_id, 0, "", {})
+
+            nickname = "未知用户"
+            avatar = ""
+            signature = ""
+
+            if items:
+                # 从第一个视频中提取作者信息
+                first_item = items[0]
+                if first_item.get("aweme_info"):
+                    first_item = first_item["aweme_info"]
+
+                author_info = first_item.get("author", {})
+                nickname = author_info.get("nickname", "未知用户")
+                signature = author_info.get("signature", "")
+
+                avatar_thumb = author_info.get("avatar_thumb", {})
+                avatar_list = avatar_thumb.get("url_list", []) if avatar_thumb else []
+                avatar = avatar_list[0] if avatar_list else ""
+
+                logger.info(f"获取UP主信息: {nickname}")
+
         if not sec_user_id:
-            raise HTTPException(status_code=400, detail="无法解析UP主ID")
+            raise HTTPException(status_code=400, detail="无法获取UP主ID")
 
         # 检查是否已存在
         existing = crud.get_author_by_sec_id(db, sec_user_id)
         if existing:
             return {"success": True, "author": existing.to_dict(), "message": "UP主已存在"}
-
-        # 通过API获取UP主信息（从第一个视频获取）
-        client = DouyinClient(req)
-        items, _, _, _ = client.fetch_awemes_list("post", sec_user_id, 0, "", {})
-
-        nickname = "未知用户"
-        avatar = ""
-        signature = ""
-
-        if items:
-            # 从第一个视频中提取作者信息
-            first_item = items[0]
-            if first_item.get("aweme_info"):
-                first_item = first_item["aweme_info"]
-
-            author_info = first_item.get("author", {})
-            nickname = author_info.get("nickname", "未知用户")
-            signature = author_info.get("signature", "")
-
-            avatar_thumb = author_info.get("avatar_thumb", {})
-            avatar_list = avatar_thumb.get("url_list", []) if avatar_thumb else []
-            avatar = avatar_list[0] if avatar_list else ""
-
-            logger.info(f"获取UP主信息: {nickname}")
 
         # 创建UP主
         author = crud.create_author(
