@@ -89,6 +89,11 @@ export async function markAllVideosAsRead(): Promise<{ success: boolean; count: 
   return response.data
 }
 
+export async function markVideoAsRead(videoId: number): Promise<{ success: boolean }> {
+  const response = await api.post(`/videos/${videoId}/read`)
+  return response.data
+}
+
 export async function checkNewVideos(): Promise<{ success: boolean; message: string }> {
   const response = await api.post('/videos/check')
   return response.data

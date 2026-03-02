@@ -3,7 +3,7 @@ import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, VideoPlay, Bell, Refresh, Warning } from '@element-plus/icons-vue'
-import { getDashboard, markAllVideosAsRead, verifyCookie, checkNewVideos, getAuthors, getGroups } from '../services/api'
+import { getDashboard, markAllVideosAsRead, markVideoAsRead, verifyCookie, checkNewVideos, getAuthors, getGroups } from '../services/api'
 import type { DashboardData, Author, AuthorGroup, VideoData } from '../types'
 
 const router = useRouter()
@@ -98,6 +98,19 @@ const handleMarkAllRead = async () => {
     await markAllVideosAsRead()
     ElMessage.success('已标记全部已读')
     loadDashboard()
+  } catch (e) {
+    ElMessage.error('操作失败')
+  }
+}
+
+const handleMarkRead = async (videoId: number) => {
+  try {
+    await markVideoAsRead(videoId)
+    // 从列表中移除该视频
+    dashboard.value.new_videos = dashboard.value.new_videos.filter(v => v.id !== videoId)
+    dashboard.value.new_video_count = dashboard.value.new_videos.length
+    filterVideos()
+    ElMessage.success('已标记为已读')
   } catch (e) {
     ElMessage.error('操作失败')
   }
@@ -273,10 +286,13 @@ onMounted(() => {
             {{ formatDate(row.create_time) }}
           </template>
         </el-table-column>
-        <el-table-column label="操作" width="80" align="center">
+        <el-table-column label="操作" width="120" align="center">
           <template #default="{ row }">
             <el-button type="primary" link size="small">
               <a :href="row.video_url" target="_blank" style="color: inherit;">查看</a>
+            </el-button>
+            <el-button type="success" link size="small" @click="handleMarkRead(row.id)">
+              已读
             </el-button>
           </template>
         </el-table-column>

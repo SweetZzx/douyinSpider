@@ -35,7 +35,7 @@ def check_new_videos():
 
         for author in authors:
             try:
-                _check_author_videos(author.sec_user_id, author.id, cookie, db)
+                _check_author_videos(author.sec_user_id, author.id, author.created_at, cookie, db)
             except Exception as e:
                 logger.error(f"检查UP主 {author.nickname} 失败: {e}")
 
@@ -47,10 +47,21 @@ def check_new_videos():
         db.close()
 
 
-def _check_author_videos(sec_user_id: str, author_id: int, cookie: str, db):
-    """检查单个UP主的新视频（增量检查）"""
+def _check_author_videos(sec_user_id: str, author_id: int, author_created_at, cookie: str, db):
+    """检查单个UP主的新视频（增量检查）
+
+    Args:
+        sec_user_id: UP主的sec_user_id
+        author_id: 数据库中的UP主ID
+        author_created_at: UP主添加时间，早于此时间发布的视频不标记为"新视频"
+        cookie: Cookie字符串
+        db: 数据库会话
+    """
     req = Request(cookie=cookie)
     client = DouyinClient(req)
+
+    # 获取UP主添加时间的时间戳
+    author_created_ts = int(author_created_at.timestamp()) if author_created_at else 0
 
     # 只获取最近的视频
     max_cursor = 0
@@ -80,6 +91,9 @@ def _check_author_videos(sec_user_id: str, author_id: int, cookie: str, db):
         # 解析视频数据
         create_time = item.get("create_time", item.get("createTime", 0))
 
+        # 判断是否为新视频：视频发布时间必须晚于UP主添加时间
+        is_new = create_time > author_created_ts
+
         # 获取下载链接
         video = item.get("video", {})
         play_addr = video.get("play_addr")
@@ -92,7 +106,7 @@ def _check_author_videos(sec_user_id: str, author_id: int, cookie: str, db):
         cover = video.get("cover", {})
         cover_url = cover.get("url_list", [""])[-1] if cover else ""
 
-        # 保存到数据库（定时检查发现的新视频标记为 is_new=True）
+        # 保存到数据库
         crud.create_video(
             db,
             author_id=author_id,
@@ -107,10 +121,13 @@ def _check_author_videos(sec_user_id: str, author_id: int, cookie: str, db):
             comment_count=item.get("statistics", {}).get("comment_count", 0),
             share_count=item.get("statistics", {}).get("share_count", 0),
             collect_count=item.get("statistics", {}).get("collect_count", 0),
-            is_new=True,
+            is_new=is_new,
         )
         new_count += 1
-        logger.info(f"发现新视频: {aweme_id} - {item.get('desc', '')[:30]}")
+        if is_new:
+            logger.info(f"发现新视频: {aweme_id} - {item.get('desc', '')[:30]}")
+        else:
+            logger.info(f"补充历史视频: {aweme_id} - {item.get('desc', '')[:30]}")
 
     # 更新UP主视频数
     if new_count > 0:
