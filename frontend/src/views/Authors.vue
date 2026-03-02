@@ -560,9 +560,10 @@ onMounted(loadData)
   }
 
   .author-card {
-    min-width: 0;
-    flex: 1 1 calc(50% - 4px);
-    max-width: calc(50% - 4px);
+    min-width: 0 !important;
+    flex: 0 0 calc(50% - 4px) !important;
+    max-width: calc(50% - 4px) !important;
+    width: calc(50% - 4px) !important;
     padding: 8px 10px;
     font-size: 13px;
   }
