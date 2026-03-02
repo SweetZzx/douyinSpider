@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, VideoPlay, Bell, Refresh, Warning } from '@element-plus/icons-vue'
-import { getDashboard, markAllVideosAsRead, verifyCookie, checkNewVideos } from '../services/api'
-import type { DashboardData } from '../types'
+import { getDashboard, markAllVideosAsRead, verifyCookie, checkNewVideos, getAuthors, getGroups } from '../services/api'
+import type { DashboardData, Author, AuthorGroup, VideoData } from '../types'
 
 const router = useRouter()
 const dashboard = ref<DashboardData>({ author_count: 0, video_count: 0, new_video_count: 0, new_videos: [] })
@@ -12,6 +12,28 @@ const loading = ref(false)
 const checking = ref(false)
 const cookieValid = ref<boolean | null>(null)
 const cookieMessage = ref('')
+
+// 分组筛选
+const authors = ref<Author[]>([])
+const groups = ref<AuthorGroup[]>([])
+const selectedGroupId = ref<number | undefined>(undefined)
+const filteredVideos = ref<VideoData[]>([])
+
+// 节流：记录上次检查时间
+const lastCheckTime = ref(0)
+const CHECK_COOLDOWN = 30000 // 30秒冷却时间
+
+// 分组选项
+const groupOptions = computed(() => {
+  const options: { value: number | undefined; label: string }[] = [
+    { value: undefined, label: '全部分组' }
+  ]
+  groups.value.forEach(g => {
+    const count = authors.value.filter(a => a.group_id === g.id).length
+    options.push({ value: g.id, label: `${g.name} (${count}人)` })
+  })
+  return options
+})
 
 const formatDate = (ts: number) => {
   if (!ts) return '--'
@@ -22,12 +44,42 @@ const formatDate = (ts: number) => {
 const loadDashboard = async () => {
   loading.value = true
   try {
-    dashboard.value = await getDashboard()
+    // 并行加载数据
+    const [dashData, authorData, groupData] = await Promise.all([
+      getDashboard(),
+      getAuthors(),
+      getGroups()
+    ])
+    dashboard.value = dashData
+    authors.value = authorData
+    groups.value = groupData
+    // 应用分组筛选
+    filterVideos()
   } catch (e: any) {
     ElMessage.error('获取数据失败')
   } finally {
     loading.value = false
   }
+}
+
+// 根据分组筛选视频
+const filterVideos = () => {
+  if (selectedGroupId.value === undefined) {
+    filteredVideos.value = dashboard.value.new_videos
+  } else {
+    // 获取该分组的作者ID列表
+    const groupAuthorIds = authors.value
+      .filter(a => a.group_id === selectedGroupId.value)
+      .map(a => a.id)
+    filteredVideos.value = dashboard.value.new_videos.filter(v =>
+      groupAuthorIds.includes(v.author_id)
+    )
+  }
+}
+
+// 分组变化处理
+const handleGroupChange = () => {
+  filterVideos()
 }
 
 const checkCookie = async () => {
@@ -52,6 +104,15 @@ const handleMarkAllRead = async () => {
 }
 
 const handleCheckNewVideos = async () => {
+  const now = Date.now()
+  const elapsed = now - lastCheckTime.value
+  if (elapsed < CHECK_COOLDOWN) {
+    const remaining = Math.ceil((CHECK_COOLDOWN - elapsed) / 1000)
+    ElMessage.warning(`请${remaining}秒后再试`)
+    return
+  }
+
+  lastCheckTime.value = now
   checking.value = true
   try {
     const result = await checkNewVideos()
@@ -146,12 +207,24 @@ onMounted(() => {
             <el-badge v-if="dashboard.new_video_count > 0" :value="dashboard.new_video_count" class="new-badge" />
           </span>
           <div class="card-actions">
+            <el-select
+              v-model="selectedGroupId"
+              placeholder="选择分组"
+              size="small"
+              class="group-select"
+              @change="handleGroupChange"
+              clearable
+            >
+              <el-option
+                v-for="opt in groupOptions"
+                :key="opt.value ?? 'all'"
+                :label="opt.label"
+                :value="opt.value"
+              />
+            </el-select>
             <el-button size="small" @click="handleCheckNewVideos" :loading="checking">
               <el-icon class="btn-icon"><Refresh /></el-icon>
               <span class="btn-text">检查新视频</span>
-            </el-button>
-            <el-button size="small" @click="loadDashboard" :loading="loading">
-              <el-icon><Refresh /></el-icon>
             </el-button>
             <el-button
               v-if="dashboard.new_video_count > 0"
@@ -166,8 +239,8 @@ onMounted(() => {
       </template>
 
       <!-- 移动端卡片列表 -->
-      <div v-if="dashboard.new_videos.length > 0" class="video-list-mobile">
-        <div v-for="video in dashboard.new_videos" :key="video.id" class="video-item">
+      <div v-if="filteredVideos.length > 0" class="video-list-mobile">
+        <div v-for="video in filteredVideos" :key="video.id" class="video-item">
           <a :href="video.video_url" target="_blank" class="video-link">
             <div class="video-author">{{ video.author_nickname || '--' }}</div>
             <div class="video-desc">{{ video.desc || '无标题' }}</div>
@@ -178,8 +251,8 @@ onMounted(() => {
 
       <!-- PC端表格 -->
       <el-table
-        v-if="dashboard.new_videos.length > 0"
-        :data="dashboard.new_videos"
+        v-if="filteredVideos.length > 0"
+        :data="filteredVideos"
         stripe
         class="video-table-pc"
       >
@@ -276,6 +349,11 @@ onMounted(() => {
 .card-actions {
   display: flex;
   gap: 8px;
+  align-items: center;
+}
+
+.group-select {
+  width: 140px;
 }
 
 /* 移动端视频列表 */
