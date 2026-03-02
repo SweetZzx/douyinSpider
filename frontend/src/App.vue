@@ -10,8 +10,9 @@ const showSettings = ref(false)
 
 // 侧边栏状态
 const isCollapsed = ref(false)
-const isMobile = ref(false)
+const isMobile = ref(true) // 默认为移动端，避免闪烁
 const showMobileMenu = ref(false)
+const isReady = ref(false) // 标记是否已完成初始化
 
 const menuItems = [
   { path: '/', icon: DataLine, label: '数据看板' },
@@ -58,6 +59,7 @@ const handleOverlayClick = () => {
 
 onMounted(() => {
   checkScreenSize()
+  isReady.value = true
   window.addEventListener('resize', checkScreenSize)
 })
 
@@ -77,6 +79,7 @@ onUnmounted(() => {
 
     <!-- 侧边栏 -->
     <el-aside
+      v-if="isReady"
       :width="asideWidth"
       class="sidebar"
       :class="{
