@@ -1,12 +1,11 @@
 <script setup lang="ts">
 import { ref, onMounted, computed } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Plus, Edit, Delete, FolderAdd, Refresh } from '@element-plus/icons-vue'
+import { Plus, Edit, Delete, FolderAdd } from '@element-plus/icons-vue'
 import {
   getAuthors,
   addAuthor,
   deleteAuthor,
-  refreshAuthor,
   getGroups,
   createGroup,
   updateGroup,
@@ -103,16 +102,6 @@ const handleDelete = async (author: Author) => {
     if (e !== 'cancel') {
       ElMessage.error('删除失败')
     }
-  }
-}
-
-const handleRefresh = async (author: Author) => {
-  try {
-    const result = await refreshAuthor(author.id)
-    ElMessage.success(result.message || '刷新中...')
-    setTimeout(loadData, 3000)
-  } catch (e: any) {
-    ElMessage.error(e.response?.data?.detail || '刷新失败')
   }
 }
 
@@ -280,9 +269,6 @@ onMounted(loadData)
               </div>
             </div>
             <div class="author-actions">
-              <el-button type="primary" link size="small" @click="handleRefresh(author)">
-                <el-icon><Refresh /></el-icon>
-              </el-button>
               <el-button type="danger" link size="small" @click="handleDelete(author)">
                 <el-icon><Delete /></el-icon>
               </el-button>
@@ -327,9 +313,6 @@ onMounted(loadData)
               </div>
             </div>
             <div class="author-actions">
-              <el-button type="primary" link size="small" @click="handleRefresh(author)">
-                <el-icon><Refresh /></el-icon>
-              </el-button>
               <el-button type="danger" link size="small" @click="handleDelete(author)">
                 <el-icon><Delete /></el-icon>
               </el-button>
@@ -578,9 +561,8 @@ onMounted(loadData)
 
   .author-card {
     min-width: 0;
-    flex: 0 0 auto;
-    width: auto;
-    max-width: 100%;
+    flex: 1 1 calc(50% - 4px);
+    max-width: calc(50% - 4px);
     padding: 8px 10px;
     font-size: 13px;
   }
