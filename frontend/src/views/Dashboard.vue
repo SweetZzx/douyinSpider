@@ -169,7 +169,7 @@ onMounted(() => {
       </template>
     </el-alert>
 
-    <h2 style="margin-bottom: 20px;">数据看板</h2>
+    <h2 class="page-title">数据看板</h2>
 
     <!-- 统计卡片 -->
     <el-row :gutter="12" class="stat-row">
@@ -268,6 +268,7 @@ onMounted(() => {
         :data="filteredVideos"
         stripe
         class="video-table-pc"
+        :style="{ width: '100%', tableLayout: 'fixed' }"
       >
         <el-table-column label="UP主" width="120">
           <template #default="{ row }">
@@ -303,6 +304,12 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* 页面标题 */
+.page-title {
+  margin: 0 0 20px 0;
+  font-size: 18px;
+}
+
 /* 统计卡片 */
 .stat-row {
   margin-bottom: 12px;
@@ -416,6 +423,14 @@ onMounted(() => {
 /* PC端表格 */
 .video-table-pc {
   display: table;
+  width: 100%;
+  max-width: 100%;
+}
+
+.video-table-pc :deep(table) {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
 }
 
 /* 移动端适配 */

@@ -141,6 +141,7 @@ header {
 .col-title { width: auto; }
 .col-stat { width: 60px; text-align: center; }
 .col-time { width: 70px; text-align: center; }
+.col-actions { width: 90px; text-align: center; }
 
 /* Cover Image */
 .video-cover {
@@ -182,6 +183,14 @@ header {
 .time-text {
   color: #999;
   font-size: 12px;
+}
+
+/* Actions */
+.video-actions {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 4px;
 }
 
 /* Loading */
@@ -314,4 +323,175 @@ header {
   border-radius: 4px;
   margin-bottom: 12px;
   font-size: 13px;
+}
+
+/* 移动端基础适配 */
+@media (max-width: 768px) {
+  /* 全局字体调整 */
+  body {
+    font-size: 14px;
+  }
+
+  /* 卡片间距调整 */
+  .el-card {
+    margin-bottom: 12px;
+  }
+
+  .el-card :deep(.el-card__header) {
+    padding: 12px 15px;
+  }
+
+  .el-card :deep(.el-card__body) {
+    padding: 15px;
+  }
+
+  /* 按钮组适配 */
+  .el-button-group {
+    display: flex;
+    flex-wrap: wrap;
+  }
+
+  .el-button-group .el-button {
+    margin-bottom: 8px;
+  }
+
+  /* 表单元素适配 */
+  .el-form-item :deep(.el-form-item__label) {
+    font-size: 13px;
+  }
+
+  .el-input :deep(.el-input__inner),
+  .el-textarea :deep(.el-textarea__inner) {
+    font-size: 14px;
+  }
+
+  /* 分页适配 */
+  .el-pagination {
+    justify-content: center;
+  }
+
+  .el-pagination :deep(.el-pagination__sizes) {
+    display: none;
+  }
+
+  /* 标签适配 */
+  .el-tag {
+    font-size: 11px;
+  }
+
+  /* 徽章适配 */
+  .el-badge :deep(.el-badge__content) {
+    font-size: 10px;
+    height: 16px;
+    line-height: 16px;
+    padding: 0 4px;
+  }
+
+  /* 提示框适配 */
+  .el-message-box {
+    width: 90% !important;
+    max-width: 400px;
+  }
+
+  /* 通知适配 */
+  .el-notification {
+    width: 90% !important;
+    max-width: 350px;
+  }
+
+  /* 表格在移动端隐藏，使用卡片替代 */
+  .el-table {
+    font-size: 13px;
+  }
+
+  .el-table :deep(.el-table__header th) {
+    font-size: 12px;
+    padding: 8px 5px;
+  }
+
+  .el-table :deep(.el-table__body td) {
+    font-size: 12px;
+    padding: 8px 5px;
+  }
+
+  /* 对话框适配 */
+  .el-dialog {
+    width: 95% !important;
+    max-width: 95% !important;
+  }
+
+  .el-dialog :deep(.el-dialog__header) {
+    padding: 15px 15px 10px;
+  }
+
+  .el-dialog :deep(.el-dialog__title) {
+    font-size: 16px;
+    line-height: 1.4;
+  }
+
+  .el-dialog :deep(.el-dialog__body) {
+    padding: 15px;
+  }
+
+  .el-dialog :deep(.el-dialog__footer) {
+    padding: 10px 15px 15px;
+  }
+
+  /* 抽屉适配 */
+  .el-drawer {
+    width: 85% !important;
+  }
+
+  /* 警告框适配 */
+  .el-alert {
+    font-size: 13px;
+  }
+
+  .el-alert :deep(.el-alert__title) {
+    font-size: 13px;
+  }
+
+  .el-alert :deep(.el-alert__description) {
+    font-size: 12px;
+  }
+
+  /* 选择器下拉菜单适配 */
+  .el-select-dropdown {
+    max-width: 90vw;
+  }
+
+  .el-select-dropdown :deep(.el-select-dropdown__item) {
+    font-size: 13px;
+    padding: 8px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* 日期选择器适配 */
+  .el-picker-panel {
+    max-width: 90vw;
+  }
+}
+
+/* 超小屏幕适配 */
+@media (max-width: 480px) {
+  /* 进一步缩小间距 */
+  .el-card :deep(.el-card__header) {
+    padding: 10px 12px;
+  }
+
+  .el-card :deep(.el-card__body) {
+    padding: 12px;
+  }
+
+  /* 按钮文字隐藏，只显示图标 */
+  .btn-icon-only .el-button span {
+    display: none;
+  }
+
+  .btn-icon-only .el-button::before {
+    content: attr(aria-label);
+    display: none;
+  }
 }

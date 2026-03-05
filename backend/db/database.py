@@ -32,6 +32,17 @@ def get_db():
         db.close()
 
 
+class get_db_session:
+    """数据库会话上下文管理器"""
+
+    def __enter__(self):
+        self.db = SessionLocal()
+        return self.db
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.db.close()
+
+
 def init_db():
     """初始化数据库（创建表）"""
     from backend.db.models import Author, Video, AuthorGroup

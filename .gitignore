@@ -43,3 +43,10 @@ Thumbs.db
 
 # 下载目录
 downloads/
+
+# 音频和转写文件
+extracted_audio/
+transcripts/
+
+# 迁移脚本
+backend/migrations/

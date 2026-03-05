@@ -6,7 +6,35 @@
 
 ## Git 仓库
 
-- **地址**: git@github.com:SweetZzx/douyinSpider.git
+- **SSH地址**: git@github.com:SweetZzx/douyinSpider.git
+- **HTTPS地址**: https://github.com/SweetZzx/douyinSpider.git
+- **Web地址**: https://github.com/SweetZzx/douyinSpider
+
+### Git 工作流程
+
+```bash
+# 查看当前状态
+git status
+
+# 添加文件到暂存区
+git add <file>
+git add .  # 添加所有文件
+
+# 提交变更
+git commit -m "描述变更内容"
+
+# 推送到远程仓库
+git push origin main
+
+# 拉取远程更新
+git pull origin main
+
+# 查看分支
+git branch
+
+# 切换分支
+git checkout <branch>
+```
 
 ## 技术栈（严禁更改）
 

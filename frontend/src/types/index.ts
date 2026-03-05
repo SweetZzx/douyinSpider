@@ -15,7 +15,14 @@ export interface VideoData {
   share_count: number
   collect_count: number
   is_new: boolean
+  rewritten_text: string | null
+  rewritten_at: string | null
   created_at: string
+  author?: {
+    id: number
+    nickname: string
+  }
+  autoCorrect?: boolean // 内部使用：是否需要自动智能纠错
 }
 
 // 分组数据类型
@@ -56,6 +63,21 @@ export interface TaskStatus {
   progress: number
   total: number
   message: string
+}
+
+// 提示词模板类型
+export interface PromptTemplate {
+  id: number
+  name: string
+  content: string
+  description: string
+  category: string
+  is_default: boolean
+  is_system: boolean
+  is_active: boolean
+  sort_order: number
+  created_at: string
+  updated_at: string
 }
 
 // API响应类型

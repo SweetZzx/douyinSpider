@@ -41,6 +41,7 @@ const formatNum = (n: number): string => {
             <th class="col-stat">👍</th>
             <th class="col-stat">💬</th>
             <th class="col-time">时间</th>
+            <th class="col-actions">操作</th>
           </tr>
         </thead>
         <tbody>
@@ -57,6 +58,9 @@ const formatNum = (n: number): string => {
             <td class="col-stat"><span class="stat-num">{{ formatNum(v.digg_count) }}</span></td>
             <td class="col-stat"><span class="stat-num">{{ formatNum(v.comment_count) }}</span></td>
             <td class="col-time"><span class="time-text">{{ formatDate(v.create_time) }}</span></td>
+            <td class="col-actions">
+              <slot name="actions" :video="v"></slot>
+            </td>
           </tr>
         </tbody>
       </table>

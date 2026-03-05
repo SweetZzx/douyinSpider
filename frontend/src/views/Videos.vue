@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref, onMounted, watch, computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import { Refresh } from '@element-plus/icons-vue'
 import { getVideos, getAuthors, getGroups } from '../services/api'
 import type { VideoData, Author, AuthorGroup } from '../types'
@@ -9,6 +9,8 @@ const videos = ref<VideoData[]>([])
 const authors = ref<Author[]>([])
 const groups = ref<AuthorGroup[]>([])
 const loading = ref(false)
+const tableRef = ref<InstanceType<typeof import('element-plus')['ElTable']>>()
+
 const page = ref(1)
 const pageSize = ref(20)
 const total = ref(0)
@@ -92,9 +94,18 @@ const formatDate = (ts: number) => {
 }
 
 const formatNum = (n: number) => {
+  if (!n) return '0'
   if (n >= 10000) return (n/10000).toFixed(1) + 'w'
   if (n >= 1000) return (n/1000).toFixed(1) + 'k'
   return String(n)
+}
+
+const formatDuration = (ms: number) => {
+  if (!ms) return '--'
+  const seconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(seconds / 60)
+  const remainingSeconds = seconds % 60
+  return minutes > 0 ? `${minutes}:${String(remainingSeconds).padStart(2, '0')}` : `${remainingSeconds}s`
 }
 
 const loadVideos = async () => {
@@ -133,7 +144,65 @@ watch([page, pageSize], () => {
   loadVideos()
 })
 
-onMounted(loadVideos)
+const openVideo = (url: string) => {
+  window.open(url, '_blank')
+}
+
+const handleDelete = async (video: VideoData) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除视频"${video.desc || '无标题'}"吗？`,
+      '删除确认',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning',
+      }
+    )
+
+    // TODO: 调用删除API
+    ElMessage.warning('删除功能暂未实现，请联系管理员')
+    // const result = await deleteVideo(video.id)
+    // if (result.success) {
+    //   ElMessage.success('删除成功')
+    //   loadVideos()
+    // }
+  } catch {
+    // 用户取消
+  }
+}
+
+// 监听容器大小变化，强制表格重新计算布局
+let resizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  loadVideos()
+
+  // 使用 ResizeObserver 监听主内容区域的宽度变化
+  resizeObserver = new ResizeObserver(() => {
+    if (tableRef.value) {
+      // 使用 requestAnimationFrame 确保在 DOM 更新后调用
+      requestAnimationFrame(() => {
+        if (tableRef.value) {
+          // 强制表格重新计算布局
+          tableRef.value.doLayout()
+        }
+      })
+    }
+  })
+
+  // 监听主内容区域
+  const mainContent = document.querySelector('.main-content')
+  if (mainContent) {
+    resizeObserver.observe(mainContent)
+  }
+})
+
+onUnmounted(() => {
+  if (resizeObserver) {
+    resizeObserver.disconnect()
+  }
+})
 </script>
 
 <template>
@@ -183,9 +252,11 @@ onMounted(loadVideos)
             <div class="video-author">{{ video.author_nickname || '--' }}</div>
             <div class="video-desc">{{ video.desc || '无标题' }}</div>
             <div class="video-meta">
+              <span>⏱️ {{ formatDuration(video.duration) }}</span>
               <span>👍 {{ formatNum(video.digg_count) }}</span>
+              <span>⭐ {{ formatNum(video.collect_count) }}</span>
               <span>💬 {{ formatNum(video.comment_count) }}</span>
-              <span>{{ formatDate(video.create_time) }}</span>
+              <span>📅 {{ formatDate(video.create_time) }}</span>
             </div>
           </div>
         </a>
@@ -193,15 +264,22 @@ onMounted(loadVideos)
       </div>
 
       <!-- PC端表格 -->
-      <el-table :data="videos" stripe v-loading="loading" class="video-table-pc">
-        <el-table-column type="index" label="#" width="50" />
+      <el-table
+        ref="tableRef"
+        :data="videos"
+        stripe
+        v-loading="loading"
+        class="video-table-pc"
+        :style="{ width: '100%', tableLayout: 'fixed' }"
+      >
+        <el-table-column type="index" label="#" width="55" align="center" />
 
-        <el-table-column label="封面" width="80">
+        <el-table-column label="封面" width="75" align="center">
           <template #default="{ row }">
-            <a :href="row.video_url" target="_blank">
+            <a :href="row.video_url" target="_blank" @click.prevent="openVideo(row.video_url)">
               <el-image
                 :src="row.cover"
-                style="width: 56px; height: 74px;"
+                style="width: 50px; height: 66px;"
                 fit="cover"
                 lazy
               />
@@ -209,35 +287,70 @@ onMounted(loadVideos)
           </template>
         </el-table-column>
 
-        <el-table-column label="UP主" width="120">
-          <template #default="{ row }">
-            {{ row.author_nickname || '--' }}
-          </template>
-        </el-table-column>
+        <el-table-column prop="author_nickname" label="UP主" width="90" show-overflow-tooltip />
 
-        <el-table-column label="标题" min-width="250">
+        <el-table-column label="标题" min-width="200" show-overflow-tooltip>
           <template #default="{ row }">
-            <a :href="row.video_url" target="_blank" style="color: #333; text-decoration: none;">
+            <a :href="row.video_url" target="_blank" @click.prevent="openVideo(row.video_url)" style="color: #333; text-decoration: none;">
               {{ row.desc || '无标题' }}
             </a>
           </template>
         </el-table-column>
 
-        <el-table-column label="👍" width="70" align="center">
+        <el-table-column label="时长" width="60" align="center">
+          <template #default="{ row }">
+            {{ formatDuration(row.duration) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="digg_count" label="点赞" width="60" align="center">
           <template #default="{ row }">
             {{ formatNum(row.digg_count) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="💬" width="70" align="center">
+        <el-table-column prop="collect_count" label="收藏" width="60" align="center">
+          <template #default="{ row }">
+            {{ formatNum(row.collect_count) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="share_count" label="分享" width="60" align="center">
+          <template #default="{ row }">
+            {{ formatNum(row.share_count) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column prop="comment_count" label="评论" width="60" align="center">
           <template #default="{ row }">
             {{ formatNum(row.comment_count) }}
           </template>
         </el-table-column>
 
-        <el-table-column label="发布时间" width="110" align="center">
+        <el-table-column label="发布时间" width="85" align="center">
           <template #default="{ row }">
             {{ formatDate(row.create_time) }}
+          </template>
+        </el-table-column>
+
+        <el-table-column label="操作" width="110" align="center" fixed="right">
+          <template #default="{ row }">
+            <el-button
+              type="primary"
+              size="small"
+              link
+              @click="openVideo(row.video_url)"
+            >
+              查看
+            </el-button>
+            <el-button
+              type="danger"
+              size="small"
+              link
+              @click="handleDelete(row)"
+            >
+              删除
+            </el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -289,6 +402,32 @@ onMounted(loadVideos)
 /* 视频卡片 */
 .video-card {
   overflow: hidden;
+}
+
+.video-card :deep(.el-card__body) {
+  padding: 0;
+}
+
+/* PC端表格 */
+.video-table-pc {
+  display: table;
+  width: 100%;
+  max-width: 100%;
+}
+
+.video-table-pc :deep(.el-table__body-wrapper) {
+  overflow-x: auto;
+}
+
+.video-table-pc :deep(.el-table__header-wrapper) {
+  overflow-x: auto;
+}
+
+/* Force table to respect container width */
+.video-table-pc :deep(table) {
+  width: 100% !important;
+  max-width: 100% !important;
+  table-layout: fixed !important;
 }
 
 /* 移动端视频列表 */

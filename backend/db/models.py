@@ -4,7 +4,7 @@
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, Text, DateTime, Boolean, ForeignKey, Float, JSON
 from sqlalchemy.orm import relationship
 from backend.db.database import Base
 
@@ -84,10 +84,16 @@ class Video(Base):
     share_count = Column(Integer, default=0, comment="分享数")
     collect_count = Column(Integer, default=0, comment="收藏数")
     is_new = Column(Boolean, default=True, comment="是否新视频")
+    rewritten_text = Column(Text, default=None, comment="AI仿写的文案")
+    rewritten_at = Column(DateTime, default=None, comment="仿写时间")
     created_at = Column(DateTime, default=datetime.now, comment="入库时间")
 
     # 关联UP主
     author = relationship("Author", back_populates="videos")
+    # 关联音频提取记录
+    audio_extractions = relationship("AudioExtraction", back_populates="video", cascade="all, delete-orphan")
+    # 关联转写记录
+    transcripts = relationship("Transcript", back_populates="video", cascade="all, delete-orphan")
 
     def to_dict(self):
         return {
@@ -106,5 +112,131 @@ class Video(Base):
             "share_count": self.share_count,
             "collect_count": self.collect_count,
             "is_new": self.is_new,
+            "rewritten_text": self.rewritten_text,
+            "rewritten_at": self.rewritten_at.isoformat() if self.rewritten_at else None,
             "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class AudioExtraction(Base):
+    """音频提取记录表"""
+    __tablename__ = "audio_extractions"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False, index=True, comment="视频ID")
+    audio_path = Column(String(512), default="", comment="音频文件路径")
+    file_size = Column(Integer, default=0, comment="文件大小（字节）")
+    duration = Column(Float, default=0.0, comment="音频时长（秒）")
+    format = Column(String(10), default="mp3", comment="音频格式")
+    status = Column(String(20), default="pending", comment="状态: pending/processing/completed/failed")
+    error_message = Column(Text, default="", comment="错误信息")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    # 关联视频
+    video = relationship("Video", back_populates="audio_extractions")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "video_id": self.video_id,
+            "aweme_id": self.video.aweme_id if self.video else "",
+            "audio_path": self.audio_path,
+            "file_size": self.file_size,
+            "duration": self.duration,
+            "format": self.format,
+            "status": self.status,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class Transcript(Base):
+    """语音转写记录表"""
+    __tablename__ = "transcripts"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    video_id = Column(Integer, ForeignKey("videos.id"), nullable=False, index=True, comment="视频ID")
+    text = Column(Text, default="", comment="完整转写文本")
+    segments = Column(JSON, default=None, comment="分段转写结果（JSON格式）")
+    language = Column(String(10), default="zh", comment="语言代码")
+    duration = Column(Float, default=0.0, comment="音频时长（秒）")
+    confidence = Column(Float, default=0.0, comment="识别置信度")
+    status = Column(String(20), default="pending", comment="状态: pending/processing/completed/failed")
+    error_message = Column(Text, default="", comment="错误信息")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    # 关联视频
+    video = relationship("Video", back_populates="transcripts")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "video_id": self.video_id,
+            "aweme_id": self.video.aweme_id if self.video else "",
+            "text": self.text,
+            "segments": self.segments,
+            "language": self.language,
+            "duration": self.duration,
+            "confidence": self.confidence,
+            "status": self.status,
+            "error_message": self.error_message,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class SystemConfig(Base):
+    """系统配置表 - 存储可配置的系统参数"""
+    __tablename__ = "system_configs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    key = Column(String(100), unique=True, nullable=False, index=True, comment="配置键")
+    value = Column(Text, nullable=True, comment="配置值")
+    description = Column(String(500), comment="配置描述")
+    category = Column(String(50), nullable=False, comment="配置分类")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "key": self.key,
+            "value": self.value,
+            "description": self.description,
+            "category": self.category,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PromptTemplate(Base):
+    """提示词模板表"""
+    __tablename__ = "prompt_templates"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(100), nullable=False, comment="模板名称")
+    content = Column(Text, nullable=False, comment="提示词内容")
+    description = Column(String(500), default="", comment="模板描述")
+    category = Column(String(50), default="rewrite", comment="模板分类：rewrite/writing")
+    is_default = Column(Boolean, default=False, comment="是否为用户默认模板")
+    is_system = Column(Boolean, default=False, comment="是否为系统默认模板")
+    is_active = Column(Boolean, default=True, comment="是否启用")
+    sort_order = Column(Integer, default=0, comment="排序顺序")
+    created_at = Column(DateTime, default=datetime.now, comment="创建时间")
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now, comment="更新时间")
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "content": self.content,
+            "description": self.description,
+            "category": self.category,
+            "is_default": self.is_default,
+            "is_system": self.is_system,
+            "is_active": self.is_active,
+            "sort_order": self.sort_order,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
         }
