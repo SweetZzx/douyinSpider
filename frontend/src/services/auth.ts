@@ -28,14 +28,14 @@ export function removeToken(): void {
 /**
  * 设置用户信息
  */
-export function setUserInfo(userInfo: { username: string }): void {
+export function setUserInfo(userInfo: { username: string; role: string }): void {
   localStorage.setItem(USER_KEY, JSON.stringify(userInfo))
 }
 
 /**
  * 获取用户信息
  */
-export function getUserInfo(): { username: string } | null {
+export function getUserInfo(): { username: string; role: string } | null {
   const info = localStorage.getItem(USER_KEY)
   if (info) {
     try {
@@ -45,6 +45,21 @@ export function getUserInfo(): { username: string } | null {
     }
   }
   return null
+}
+
+/**
+ * 获取用户角色
+ */
+export function getUserRole(): string {
+  const info = getUserInfo()
+  return info?.role || 'user'
+}
+
+/**
+ * 检查是否是超级管理员
+ */
+export function isSuperAdmin(): boolean {
+  return getUserRole() === 'super_admin'
 }
 
 /**
@@ -61,14 +76,27 @@ export async function login(username: string, password: string): Promise<{
   access_token: string
   token_type: string
   username: string
+  role: string
 }> {
   const response = await axios.post('/api/auth/login', { username, password })
-  const { access_token, username: user } = response.data
+  const { access_token, username: user, role } = response.data
 
-  // 保存令牌和用户信息
+  // 保存令牌和用户信息（包括角色）
   setToken(access_token)
-  setUserInfo({ username: user })
+  setUserInfo({ username: user, role })
 
+  return response.data
+}
+
+/**
+ * 用户注册
+ */
+export async function register(username: string, email: string, password: string): Promise<{
+  success: boolean
+  message: string
+  username: string
+}> {
+  const response = await axios.post('/api/auth/register', { username, email, password })
   return response.data
 }
 

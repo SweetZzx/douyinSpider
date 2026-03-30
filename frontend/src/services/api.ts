@@ -41,8 +41,8 @@ api.interceptors.response.use(
 )
 
 // ==================== 看板 ====================
-export async function getDashboard(): Promise<DashboardData> {
-  const response = await api.get('/dashboard')
+export async function getDashboard(page: number = 1, pageSize: number = 10): Promise<DashboardData> {
+  const response = await api.get('/dashboard', { params: { page, page_size: pageSize } })
   return response.data
 }
 
@@ -444,5 +444,21 @@ export async function chatWithAI(
   }, {
     timeout: 120000  // 2分钟超时
   })
+  return response.data
+}
+
+// ==================== 每日报告（xixi专用）====================
+
+export async function getDailyReport(date?: string): Promise<{
+  success: boolean
+  report: string
+  video_count: number
+  time_range: {
+    start: string
+    end: string
+  }
+}> {
+  const params = date ? { date } : {}
+  const response = await api.get('/daily-report', { params })
   return response.data
 }

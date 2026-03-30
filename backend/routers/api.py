@@ -12,23 +12,20 @@ from fastapi import APIRouter, HTTPException, Depends, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from loguru import logger
-from slowapi import Limiter
 
 from backend.config import settings, set_cookie, get_cookie
 from backend.db.database import get_db
 from backend.db import crud
 from backend.db.models import Author, Video, AuthorGroup
 from backend.routers import audio, transcribe
-from backend.lib.douyin.request import Request
+from backend.lib.douyin.request import Request as DouyinRequest
 from backend.lib.douyin.client import DouyinClient
 from backend.lib.douyin.parser import DataParser
 from backend.lib.douyin.target import TargetHandler
 from backend.utils.text import extract_valid_urls
 from backend.auth import get_current_user
+from backend.rate_limit import limiter
 
-
-# 速率限制器（每分钟100次请求）
-limiter = Limiter(key_func=lambda r: r.client.host if r.client else "127.0.0.1")
 
 router = APIRouter()
 
@@ -110,7 +107,7 @@ async def verify_cookie(user: dict = Depends(get_current_user)):
         return {"valid": False, "message": "未配置Cookie"}
 
     try:
-        req = Request(cookie=cookie)
+        req = DouyinRequest(cookie=cookie)
         client = DouyinClient(req)
 
         # 尝试获取一个公开的用户视频列表来验证Cookie
@@ -434,7 +431,7 @@ async def add_author(
             raise HTTPException(status_code=400, detail="无法识别有效的链接")
 
         # 解析URL获取目标信息
-        req = Request(cookie=cookie)
+        req = DouyinRequest(cookie=cookie)
         handler = TargetHandler(req, url, "post", settings.download_path)
         handler.parse_target_id()
 
@@ -669,7 +666,7 @@ def _crawl_author_videos(sec_user_id: str, author_id: int, cookie: str, db: Sess
         mark_as_new: 是否将新视频标记为"新视频"（首次添加UP主时应为False）
     """
     try:
-        req = Request(cookie=cookie)
+        req = DouyinRequest(cookie=cookie)
         client = DouyinClient(req)
 
         max_cursor = 0
@@ -776,7 +773,7 @@ def start_task(data: AddAuthorRequest):
 
     def _run():
         try:
-            req = Request(cookie=cookie)
+            req = DouyinRequest(cookie=cookie)
             handler = TargetHandler(req, data.url, "post", settings.download_path)
             handler.parse_target_id()
 

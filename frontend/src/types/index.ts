@@ -48,12 +48,21 @@ export interface Author {
   updated_at: string
 }
 
+// 分页数据类型
+export interface Pagination {
+  page: number
+  page_size: number
+  total: number
+  total_pages: number
+}
+
 // 看板数据类型
 export interface DashboardData {
   author_count: number
   video_count: number
   new_video_count: number
   new_videos: VideoData[]
+  pagination: Pagination
 }
 
 // 任务状态类型

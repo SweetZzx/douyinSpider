@@ -536,29 +536,27 @@ const handleCorrectTranscript = async () => {
   }
 }
 
-// 智能纠错仿写文案
-const handleCorrectRewrite = async () => {
+// 重新仿写文案
+const handleReRewrite = async () => {
   if (!currentVideoId.value) return
 
-  const originalText = currentRewrite.value.trim()
-  if (!originalText) {
-    ElMessage.warning('文案内容为空，无法纠错')
+  const transcriptText = transcripts.value[currentVideoId.value]
+  if (!transcriptText || !transcriptText.trim()) {
+    ElMessage.warning('原文案内容为空，请先提取文案')
     return
   }
 
   correctingRewrite.value = true
   try {
-    const context = currentVideoDesc.value ? `视频简介：${currentVideoDesc.value}\n\n` : ''
-    const prompt = `${context}请对以下仿写的文案进行智能纠错，修正错别字、标点符号和语法错误，保持原意不变。只返回纠错后的文案，不要任何解释。\n\n文案：\n${originalText}`
-
-    const result = await updateVideoRewrite(currentVideoId.value, originalText, prompt)
+    // 调用重新仿写API
+    const result = await rewriteVideoContent(currentVideoId.value, selectedTemplateId.value || undefined)
     if (result.success) {
       currentRewrite.value = result.rewritten_text
       rewrites.value[currentVideoId.value] = result.rewritten_text
-      ElMessage.success('智能纠错完成！')
+      ElMessage.success('重新仿写完成！')
     }
   } catch (error: any) {
-    ElMessage.error(error.response?.data?.detail || '智能纠错失败')
+    ElMessage.error(error.response?.data?.detail || '重新仿写失败')
   } finally {
     correctingRewrite.value = false
   }
@@ -1074,10 +1072,10 @@ onMounted(() => {
       />
       <template #footer>
         <el-button
-          @click="handleCorrectRewrite"
+          @click="handleReRewrite"
           :loading="correctingRewrite"
         >
-          智能纠错
+          重新仿写
         </el-button>
         <el-button @click="copyRewrite" :icon="DocumentCopy">
           复制
@@ -1163,7 +1161,7 @@ onMounted(() => {
 
 .info-card {
   margin-bottom: 20px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 100%);
   border: none;
 }
 

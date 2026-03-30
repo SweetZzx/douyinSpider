@@ -7,7 +7,7 @@ import { getDashboard, markAllVideosAsRead, markVideoAsRead, verifyCookie, check
 import type { DashboardData, Author, AuthorGroup, VideoData } from '../types'
 
 const router = useRouter()
-const dashboard = ref<DashboardData>({ author_count: 0, video_count: 0, new_video_count: 0, new_videos: [] })
+const dashboard = ref<DashboardData>({ author_count: 0, video_count: 0, new_video_count: 0, new_videos: [], pagination: { page: 1, page_size: 10, total: 0, total_pages: 0 } })
 const loading = ref(false)
 const checking = ref(false)
 const cookieValid = ref<boolean | null>(null)
@@ -18,6 +18,10 @@ const authors = ref<Author[]>([])
 const groups = ref<AuthorGroup[]>([])
 const selectedGroupId = ref<number | undefined>(undefined)
 const filteredVideos = ref<VideoData[]>([])
+
+// 分页
+const currentPage = ref(1)
+const pageSize = ref(10)
 
 // 节流：记录上次检查时间
 const lastCheckTime = ref(0)
@@ -46,7 +50,7 @@ const loadDashboard = async () => {
   try {
     // 并行加载数据
     const [dashData, authorData, groupData] = await Promise.all([
-      getDashboard(),
+      getDashboard(currentPage.value, pageSize.value),
       getAuthors(),
       getGroups()
     ])
@@ -79,7 +83,20 @@ const filterVideos = () => {
 
 // 分组变化处理
 const handleGroupChange = () => {
+  currentPage.value = 1
   filterVideos()
+}
+
+// 分页变化处理
+const handlePageChange = (page: number) => {
+  currentPage.value = page
+  loadDashboard()
+}
+
+const handleSizeChange = (size: number) => {
+  pageSize.value = size
+  currentPage.value = 1
+  loadDashboard()
 }
 
 const checkCookie = async () => {
@@ -106,10 +123,8 @@ const handleMarkAllRead = async () => {
 const handleMarkRead = async (videoId: number) => {
   try {
     await markVideoAsRead(videoId)
-    // 从列表中移除该视频
-    dashboard.value.new_videos = dashboard.value.new_videos.filter(v => v.id !== videoId)
-    dashboard.value.new_video_count = dashboard.value.new_videos.length
-    filterVideos()
+    // 重新加载数据以更新分页
+    await loadDashboard()
     ElMessage.success('已标记为已读')
   } catch (e) {
     ElMessage.error('操作失败')
@@ -299,6 +314,31 @@ onMounted(() => {
         </el-table-column>
       </el-table>
       <el-empty v-else description="暂无新视频" />
+
+      <!-- 分页 -->
+      <div v-if="dashboard.pagination.total > 0" class="pagination-container">
+        <!-- PC端分页 -->
+        <el-pagination
+          class="pagination-pc"
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :page-sizes="[10, 20, 50, 100]"
+          :total="dashboard.pagination.total"
+          layout="total, sizes, prev, pager, next, jumper"
+          @size-change="handleSizeChange"
+          @current-change="handlePageChange"
+        />
+        <!-- 移动端分页 -->
+        <el-pagination
+          class="pagination-mobile"
+          v-model:current-page="currentPage"
+          v-model:page-size="pageSize"
+          :total="dashboard.pagination.total"
+          layout="prev, pager, next"
+          small
+          @current-change="handlePageChange"
+        />
+      </div>
     </el-card>
   </div>
 </template>
@@ -471,5 +511,36 @@ onMounted(() => {
   .video-table-pc {
     display: none;
   }
+
+  .pagination-container {
+    justify-content: center;
+  }
+
+  .pagination-pc {
+    display: none !important;
+  }
+
+  .pagination-mobile {
+    display: flex !important;
+  }
+}
+
+/* 分页容器 */
+.pagination-container {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+
+/* PC端分页 */
+.pagination-pc {
+  display: flex;
+}
+
+/* 移动端分页 */
+.pagination-mobile {
+  display: none;
 }
 </style>

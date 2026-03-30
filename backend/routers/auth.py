@@ -6,13 +6,10 @@
 from fastapi import APIRouter, HTTPException, status, Depends, Request
 from pydantic import BaseModel
 from loguru import logger
-from slowapi import Limiter
 
 from backend.auth import authenticate_user, create_access_token, get_current_user
+from backend.rate_limit import limiter
 
-
-# 速率限制器
-limiter = Limiter(key_func=lambda r: r.client.host if r.client else "127.0.0.1")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 

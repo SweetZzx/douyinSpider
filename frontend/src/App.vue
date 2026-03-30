@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { DataLine, User, VideoPlay, EditPen, Setting, Fold, Expand } from '@element-plus/icons-vue'
-import { logout } from './services/auth'
+import { DataLine, User, VideoPlay, EditPen, Setting, Fold, Expand, Document } from '@element-plus/icons-vue'
+import { logout, getUserInfo } from './services/auth'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const router = useRouter()
@@ -17,19 +17,34 @@ const isReady = ref(false) // 标记是否已完成初始化
 // 子菜单展开状态
 const settingsMenuOpen = ref(false)
 
+// 当前用户角色
+const userRole = ref<string>('user')
+
 // 监听路由，自动展开设置菜单
 const currentRoute = computed(() => route.path)
 
-// 判断是否是登录页面
-const isLoginPage = computed(() => route.path === '/login')
+// 判断是否是认证页面（登录或注册）
+const isAuthPage = computed(() => route.path === '/login' || route.path === '/register')
 
-const menuItems = [
+// 基础菜单项
+const baseMenuItems = [
   { path: '/', icon: DataLine, label: '数据看板' },
   { path: '/authors', icon: User, label: 'UP主管理' },
   { path: '/videos', icon: VideoPlay, label: '视频列表' },
   { path: '/content-rewrite', icon: EditPen, label: '文案仿写' },
   { path: '/content-writing', icon: EditPen, label: '文案写作' },
 ]
+
+// 动态菜单项（根据用户角色显示）
+const menuItems = computed(() => {
+  const items = [...baseMenuItems]
+  // 只有super_admin角色显示"每日报告"菜单
+  if (userRole.value === 'super_admin') {
+    // 在"文案写作"后面插入"每日报告"
+    items.splice(5, 0, { path: '/daily-report', icon: Document, label: '每日报告' })
+  }
+  return items
+})
 
 // 设置子菜单
 const settingsSubMenus = [
@@ -109,6 +124,12 @@ onMounted(() => {
     settingsMenuOpen.value = true
   }
   window.addEventListener('resize', checkScreenSize)
+
+  // 获取当前用户角色
+  const userInfo = getUserInfo()
+  if (userInfo) {
+    userRole.value = userInfo.role
+  }
 })
 
 onUnmounted(() => {
@@ -117,8 +138,8 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <!-- 登录页面：独立全屏显示 -->
-  <div v-if="isLoginPage" class="login-page-wrapper">
+  <!-- 登录/注册页面：独立全屏显示 -->
+  <div v-if="isAuthPage" class="login-page-wrapper">
     <router-view />
   </div>
 
@@ -154,7 +175,7 @@ onUnmounted(() => {
         :collapse="!isMobile && isCollapsed"
         background-color="#001529"
         text-color="#fff"
-        active-text-color="#fe2c55"
+        active-text-color="#ff85a2"
         @select="handleMenuSelect"
       >
         <!-- 主菜单项 -->
